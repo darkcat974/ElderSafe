@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
 from fastapi.responses import JSONResponse
-from crypto import encrypt_json, decrypt_json
+from crypto import encrypt_json
 
 # ------------------ pre-set ------------------
 
@@ -38,6 +38,12 @@ class UserCreate(BaseModel):
 
 
 Base.metadata.create_all(bind=engine)
+
+# ------------------ UTILS -------------------
+
+def sa_to_dict(obj):
+    return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+
 # ------------------ ROUTES ------------------
 
 @app.get("/secure-info")
@@ -45,12 +51,6 @@ def get_secure_info():
     data = {"message": "hello", "answer": 42}
     token = encrypt_json(data)
     return JSONResponse(content={"ciphertext": token})
-
-@app.get("/decipher-info/{token}")
-def get_decipher_info(token: str):
-    print(token)
-    decifer = decrypt_json(token)
-    return JSONResponse(content={"deciphertext": decifer})
 
 @app.post("/data")
 def receive_data(user_data: UserCreate):
@@ -91,10 +91,13 @@ def receive_data(user_data: UserCreate):
 def get_users():
     db = SessionLocal()
     try:
-        return db.query(User).all()
+        users = db.query(User).all()
+        users_data = [sa_to_dict(u) for u in users]
+
+        token = encrypt_json(users_data)
+        return JSONResponse(content={"data": token})
     finally:
         db.close()
-
 
 @app.get("/users/{mac}")
 def get_user(mac: str):
@@ -103,6 +106,10 @@ def get_user(mac: str):
         user = db.query(User).filter(User.mac_address == mac).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        return user
+
+        user_data = sa_to_dict(user)
+        token = encrypt_json(user_data)
+        return JSONResponse(content={"data": token})
     finally:
         db.close()
+
