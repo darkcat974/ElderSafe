@@ -2,6 +2,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
+from fastapi.responses import JSONResponse
+from crypto import encrypt_json, decrypt_json
+
+# ------------------ pre-set ------------------
 
 DATABASE_URL = "sqlite:///./database.db"
 
@@ -35,6 +39,18 @@ class UserCreate(BaseModel):
 
 Base.metadata.create_all(bind=engine)
 # ------------------ ROUTES ------------------
+
+@app.get("/secure-info")
+def get_secure_info():
+    data = {"message": "hello", "answer": 42}
+    token = encrypt_json(data)
+    return JSONResponse(content={"ciphertext": token})
+
+@app.get("/decipher-info/{token}")
+def get_decipher_info(token: str):
+    print(token)
+    decifer = decrypt_json(token)
+    return JSONResponse(content={"deciphertext": decifer})
 
 @app.post("/data")
 def receive_data(user_data: UserCreate):
