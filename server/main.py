@@ -1,24 +1,32 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Depends
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.orm import sessionmaker, declarative_base
-from fastapi.responses import JSONResponse
-from crypto import encrypt_json
-
-# ------------------ pre-set ------------------
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
 DATABASE_URL = "sqlite:///./database.db"
 
-engine = create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False}
-)
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI()
+from fastapi.middleware.cors import CORSMiddleware
 
+app = FastAPI(title="User API")
 
-# ------------------ MODEL ------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Dev wildcard—safe for localhost
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicit POST
+    allow_headers=["*"],
+)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 class User(Base):
     __tablename__ = "users"
@@ -28,88 +36,111 @@ class User(Base):
     nb_room = Column(Integer, default=0)
     name = Column(String, default="Unknown")
 
-
-# ------------------ SCHEMA ------------------
-
 class UserCreate(BaseModel):
     mac_address: str
     nb_room: int | None = 0
     name: str | None = "Unknown"
 
+# Response schema with ORM config
+class UserResponse(BaseModel):
+    id: int
+    mac_address: str
+    nb_room: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 Base.metadata.create_all(bind=engine)
 
-# ------------------ UTILS -------------------
-
-def sa_to_dict(obj):
-    return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
-
-# ------------------ ROUTES ------------------
-
-@app.get("/secure-info")
-def get_secure_info():
-    data = {"message": "hello", "answer": 42}
-    token = encrypt_json(data)
-    return JSONResponse(content={"ciphertext": token})
-
-@app.post("/data")
-def receive_data(user_data: UserCreate):
+def seed_fake_users():
     db = SessionLocal()
     try:
-        if not user_data.mac_address:
-            raise HTTPException(status_code=400, detail="MAC address is required")
+        fake_users = [
+            ("00:1B:44:11:3A:B7", 1, "Alice"),
+            ("00:1B:44:11:3A:B8", 2, "Bob"),
+            ("AA:BB:CC:DD:EE:FF", 3, "Charlie"),
+            ("11:22:33:44:55:66", 4, "Dana"),
+            ("FF:EE:DD:CC:BB:AA", 5, "Eve"),
+        ]
 
-        user = db.query(User).filter(User.mac_address == user_data.mac_address).first()
+        added_count = 0
+        for mac, nb_room, name in fake_users:
+            # Skip if MAC already exists
+            if not db.query(User).filter(User.mac_address == mac).first():
+                db.add(User(mac_address=mac, nb_room=nb_room, name=name))
+                added_count += 1
 
-        if user:
-            user.nb_room = user_data.nb_room or 0
-            user.name = user_data.name or "Unknown"
+        if added_count > 0:
+            db.commit()
+            print(f"Seeded {added_count} new fake users")
         else:
-            user = User(
-                mac_address=user_data.mac_address,
-                nb_room=user_data.nb_room or 0,
-                name=user_data.name or "Unknown"
-            )
-            db.add(user)
+            print("All fake users already exist")
+    finally:
+        db.close()
 
-        db.commit()
-        db.refresh(user)
+Base.metadata.create_all(bind=engine)
 
-        return {
-            "success": True,
-            "message": "Données reçues et enregistrées !",
-            "user": user
+# Seed immediately after tables are created
+seed_fake_users()
+
+@app.on_event("startup")
+async def startup_event():
+    print("🚀 Server started with fake users seeded!")
+
+
+# ------------------ ROOT ------------------
+
+@app.post("/data", response_model=dict)
+def receive_data(user_data: UserCreate, db: Session = Depends(get_db)):
+    if not user_data.mac_address:
+        raise HTTPException(status_code=400, detail="MAC address is required")
+
+    user = db.query(User).filter(User.mac_address == user_data.mac_address).first()
+
+    if user:
+        user.nb_room = user_data.nb_room or 0
+        user.name = user_data.name or "Unknown"
+    else:
+        user = User(
+            mac_address=user_data.mac_address,
+            nb_room=user_data.nb_room or 0,
+            name=user_data.name or "Unknown"
+        )
+        db.add(user)
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "success": True,
+        "message": "Données reçues et enregistrées !",
+        "user": {
+            "id": user.id,
+            "mac_address": user.mac_address,
+            "nb_room": user.nb_room,
+            "name": user.name
         }
+    }
 
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to save data")
-    finally:
-        db.close()
+@app.get("/users", response_model=list[UserResponse])
+def get_users(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    return users
 
+@app.get("/users/{mac}", response_model=UserResponse)
+def get_user(mac: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.mac_address == mac).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
-@app.get("/users")
-def get_users():
-    db = SessionLocal()
-    try:
-        users = db.query(User).all()
-        users_data = [sa_to_dict(u) for u in users]
-
-        token = encrypt_json(users_data)
-        return JSONResponse(content={"data": token})
-    finally:
-        db.close()
-
-@app.get("/users/{mac}")
-def get_user(mac: str):
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter(User.mac_address == mac).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        user_data = sa_to_dict(user)
-        token = encrypt_json(user_data)
-        return JSONResponse(content={"data": token})
-    finally:
-        db.close()
-
+@app.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    db.delete(user)
+    db.commit()
+    
+    return {"success": True, "message": "User deleted"}
