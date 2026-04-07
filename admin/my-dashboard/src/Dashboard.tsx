@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from './types';
+import { Local_servers } from './types';
 
 const API_BASE = 'http://127.0.0.1:8000/';
 
@@ -7,10 +8,10 @@ const Dashboard: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ mac_address: '', nb_room: 0, name: '' });
-  const [newForm, setNewForm] = useState({ mac_address: '', nb_room: 0, name: '' });
-
+  const [newForm, setNewForm] = useState({ email: '', name: '' });
+  const [servers, setServers] = useState<Local_servers[]>([]);
+  const [openUserId, setOpenUserId] = useState<number | null>(null);
+  
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -18,11 +19,10 @@ const Dashboard: React.FC = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}users`, { mode: 'cors' });
-      if (!res.ok) throw new Error('Fetch failed');
-      const data = await res.json();
-      setUsers(data);
-    } catch (err) {
+      const res = await fetch(`${API_BASE}users`);
+      if (!res.ok) throw new Error();
+      setUsers(await res.json());
+    } catch {
       setError('Error loading users');
     } finally {
       setLoading(false);
@@ -32,141 +32,137 @@ const Dashboard: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API_BASE}data`, {
+      const res = await fetch(`${API_BASE}users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newForm),
       });
-      if (!res.ok) throw new Error('Create failed');
-      setNewForm({ mac_address: '', nb_room: 0, name: '' });
-      fetchUsers();  // Refresh list
-    } catch (err) {
+      if (!res.ok) throw new Error();
+      setNewForm({ email: '', name: '' });
+      fetchUsers();
+    } catch {
       setError('Create failed');
     }
   };
 
-  const handleUpdate = async (user: User) => {
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this user?')) return;
+
     try {
-      const res = await fetch(`${API_BASE}users/${user.mac_address}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mac_address: user.mac_address, nb_room: user.nb_room, name: user.name }),
+      const res = await fetch(`${API_BASE}users/${id}`, {
+        method: 'DELETE',
       });
-      if (!res.ok) throw new Error('Update failed');
-      setEditingId(null);
+      if (!res.ok) throw new Error();
       fetchUsers();
-    } catch (err) {
-      setError('Update failed');
+    } catch {
+      setError('Delete failed');
     }
   };
 
-  const handleDelete = async (id: number) => {
-  if (!confirm('Delete this user?')) return;
-  
-  try {
-    const res = await fetch(`${API_BASE}users/${id}`, {
-      method: 'DELETE',
-    });
-    if (!res.ok) throw new Error('Delete failed');
-    fetchUsers();
-  } catch (err) {
-    setError('Delete failed');
-  }
-};
+  const fetchData = async () => {
+    try {
+      setLoading(true);
 
-  const startEdit = (user: User) => {
-    setEditingId(user.id);
-    setEditForm(user);
+      const [usersRes, serversRes] = await Promise.all([
+        fetch(`${API_BASE}users`),
+        fetch(`${API_BASE}servers`)
+      ]);
+
+      if (!usersRes.ok || !serversRes.ok) throw new Error();
+
+      setUsers(await usersRes.json());
+      setServers(await serversRes.json());
+
+    } catch {
+      setError('Error loading data');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  useEffect(() => {
+    fetchData();
+  }, []);
+  
+  const getUserServers = (userId: number) => {
+    return servers.filter(s => s.client_id === userId);
   };
 
   if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
+  if (error) return <div>{error}</div>;
+
+
 
   return (
     <div style={{ padding: '20px' }}>
       <h1>Users Dashboard</h1>
 
-      {/* Create Form */}
+      {/* Create */}
       <form onSubmit={handleCreate} style={{ marginBottom: '20px' }}>
         <input
-          placeholder="MAC Address"
-          value={newForm.mac_address}
-          onChange={(e) => setNewForm({ ...newForm, mac_address: e.target.value })}
+          placeholder="Email"
+          value={newForm.email}
+          onChange={(e) => setNewForm({ ...newForm, email: e.target.value })}
           required
-        />
-        <input
-          type="number"
-          placeholder="Nb Rooms"
-          value={newForm.nb_room}
-          onChange={(e) => setNewForm({ ...newForm, nb_room: Number(e.target.value) })}
         />
         <input
           placeholder="Name"
           value={newForm.name}
           onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
+          required
         />
-        <button type="submit">Add User</button>
+        <button type="submit">Add</button>
       </form>
 
-      {/* Users Table */}
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      {/* Table */}
+      <table style={{ width: '100%' }}>
         <thead>
           <tr>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>ID</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>MAC Address</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Nb Rooms</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Name</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Actions</th>
+            <th>ID</th>
+            <th>Email</th>
+            <th>Name</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          {users.map((user) => (
-            <tr key={user.id}>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{user.id}</td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                {editingId === user.id ? (
-                  <input
-                    value={editForm.mac_address}
-                    onChange={(e) => setEditForm({ ...editForm, mac_address: e.target.value })}
-                  />
-                ) : (
-                  user.mac_address
+          {users.map((u) => {
+            const userServers = getUserServers(u.id);
+
+            return (
+              <React.Fragment key={u.id}>
+                <tr>
+                  <td>{u.id}</td>
+                  <td>{u.email}</td>
+                  <td>{u.name}</td>
+                  <td>
+                    <button onClick={() => setOpenUserId(openUserId === u.id ? null : u.id)}>
+                      {openUserId === u.id ? "Hide" : "Show"} servers ({userServers.length})
+                    </button>
+                  </td>
+                </tr>
+
+                {openUserId === u.id && (
+                  <tr>
+                    <td colSpan={4}>
+                      {userServers.length === 0 ? (
+                        <div>No servers</div>
+                      ) : (
+                        <ul>
+                          {userServers.map(s => (
+                            <li key={s.id}>
+                              <b>{s.local_server_id}</b> — {s.forfait} — {s.status}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                  </tr>
                 )}
-              </td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                {editingId === user.id ? (
-                  <input
-                    type="number"
-                    value={editForm.nb_room}
-                    onChange={(e) => setEditForm({ ...editForm, nb_room: Number(e.target.value) })}
-                  />
-                ) : (
-                  user.nb_room
-                )}
-              </td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                {editingId === user.id ? (
-                  <input
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  />
-                ) : (
-                  user.name
-                )}
-              </td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                {editingId === user.id ? (
-                  <button onClick={() => handleUpdate(editForm as User)}>Save</button>
-                ) : (
-                  <button onClick={() => startEdit(user)}>Edit</button>
-                )}
-                <button onClick={() => handleDelete(user.id)} style={{ marginLeft: '5px' }}>Delete</button>
-              </td>
-            </tr>
-          ))}
+              </React.Fragment>
+            );
+          })}
         </tbody>
       </table>
-      <button onClick={fetchUsers} style={{ marginTop: '10px' }}>Refresh</button>
     </div>
   );
 };

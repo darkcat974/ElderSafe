@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy import Enum, ForeignKey
+import enum
 
 DATABASE_URL = "sqlite:///./database.db"
 
@@ -28,119 +30,165 @@ def get_db():
     finally:
         db.close()
 
+class StatusEnum(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    ERROR = "ERROR"
+    MAINTENANCE = "MAINTENANCE"
+
+
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    mac_address = Column(String, unique=True, index=True)
-    nb_room = Column(Integer, default=0)
-    name = Column(String, default="Unknown")
+    email = Column(String, unique=True, index=True)
+    name = Column(String)
+
+
+class LocalServer(Base):
+    __tablename__ = "local_servers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    local_server_id = Column(String, unique=True, index=True)
+    client_id = Column(Integer, ForeignKey("users.id"))
+    forfait = Column(String)
+    username = Column(String)
+    status = Column(Enum(StatusEnum), default=StatusEnum.ACTIVE)
+
+Base.metadata.create_all(bind=engine)
 
 class UserCreate(BaseModel):
-    mac_address: str
-    nb_room: int | None = 0
-    name: str | None = "Unknown"
+    email: str
+    name: str
 
-# Response schema with ORM config
+
 class UserResponse(BaseModel):
     id: int
-    mac_address: str
-    nb_room: int
+    email: str
     name: str
 
     model_config = ConfigDict(from_attributes=True)
 
-Base.metadata.create_all(bind=engine)
 
-def seed_fake_users():
+class LocalServerCreate(BaseModel):
+    local_server_id: str
+    client_id: int
+    forfait: str
+    username: str
+    status: StatusEnum = StatusEnum.ACTIVE
+
+
+class LocalServerResponse(BaseModel):
+    id: int
+    local_server_id: str
+    client_id: int
+    forfait: str
+    username: str
+    status: StatusEnum
+
+    model_config = ConfigDict(from_attributes=True)
+
+import random
+
+def seed_data():
     db = SessionLocal()
     try:
-        fake_users = [
-            ("00:1B:44:11:3A:B7", 1, "Alice"),
-            ("00:1B:44:11:3A:B8", 2, "Bob"),
-            ("AA:BB:CC:DD:EE:FF", 3, "Charlie"),
-            ("11:22:33:44:55:66", 4, "Dana"),
-            ("FF:EE:DD:CC:BB:AA", 5, "Eve"),
+        # ---- USERS ----
+        users_data = [
+            ("alice@mail.com", "Alice"),
+            ("bob@mail.com", "Bob"),
+            ("charlie@mail.com", "Charlie"),
+            ("dana@mail.com", "Dana"),
+            ("eve@mail.com", "Eve"),
         ]
 
-        added_count = 0
-        for mac, nb_room, name in fake_users:
-            # Skip if MAC already exists
-            if not db.query(User).filter(User.mac_address == mac).first():
-                db.add(User(mac_address=mac, nb_room=nb_room, name=name))
-                added_count += 1
+        users = []
+        for email, name in users_data:
+            user = db.query(User).filter_by(email=email).first()
+            if not user:
+                user = User(email=email, name=name)
+                db.add(user)
+                db.flush()  # get id immediately
+            users.append(user)
 
-        if added_count > 0:
-            db.commit()
-            print(f"Seeded {added_count} new fake users")
-        else:
-            print("All fake users already exist")
+        # ---- SERVERS ----
+        forfaits = ["basic", "pro", "enterprise"]
+        statuses = list(StatusEnum)
+
+        for i in range(10):
+            local_id = f"server_{i}"
+
+            if db.query(LocalServer).filter_by(local_server_id=local_id).first():
+                continue
+
+            server = LocalServer(
+                local_server_id=local_id,
+                client_id=random.choice(users).id,
+                forfait=random.choice(forfaits),
+                username=f"user_{i}",
+                status=random.choice(statuses),
+            )
+            db.add(server)
+
+        db.commit()
+        print("✅ Seed done")
     finally:
         db.close()
 
 Base.metadata.create_all(bind=engine)
 
-# Seed immediately after tables are created
-seed_fake_users()
-
 @app.on_event("startup")
-async def startup_event():
-    print("🚀 Server started with fake users seeded!")
+async def startup():
+    seed_data()
 
 
 # ------------------ ROOT ------------------
+# -------- USERS --------
 
-@app.post("/data", response_model=dict)
-def receive_data(user_data: UserCreate, db: Session = Depends(get_db)):
-    if not user_data.mac_address:
-        raise HTTPException(status_code=400, detail="MAC address is required")
-
-    user = db.query(User).filter(User.mac_address == user_data.mac_address).first()
-
-    if user:
-        user.nb_room = user_data.nb_room or 0
-        user.name = user_data.name or "Unknown"
-    else:
-        user = User(
-            mac_address=user_data.mac_address,
-            nb_room=user_data.nb_room or 0,
-            name=user_data.name or "Unknown"
-        )
-        db.add(user)
-
+@app.post("/users", response_model=UserResponse)
+def create_user(data: UserCreate, db: Session = Depends(get_db)):
+    user = User(email=data.email, name=data.name)
+    db.add(user)
     db.commit()
     db.refresh(user)
+    return user
 
-    return {
-        "success": True,
-        "message": "Données reçues et enregistrées !",
-        "user": {
-            "id": user.id,
-            "mac_address": user.mac_address,
-            "nb_room": user.nb_room,
-            "name": user.name
-        }
-    }
 
 @app.get("/users", response_model=list[UserResponse])
 def get_users(db: Session = Depends(get_db)):
-    users = db.query(User).all()
-    return users
+    return db.query(User).all()
 
-@app.get("/users/{mac}", response_model=UserResponse)
-def get_user(mac: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.mac_address == mac).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
 
-@app.delete("/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    db.delete(user)
+# -------- LOCAL SERVERS --------
+
+@app.post("/servers", response_model=LocalServerResponse)
+def create_server(data: LocalServerCreate, db: Session = Depends(get_db)):
+    server = LocalServer(**data.model_dump())
+    db.add(server)
     db.commit()
-    
-    return {"success": True, "message": "User deleted"}
+    db.refresh(server)
+    return server
+
+
+@app.get("/servers", response_model=list[LocalServerResponse])
+def get_servers(db: Session = Depends(get_db)):
+    return db.query(LocalServer).all()
+
+
+@app.get("/servers/{server_id}", response_model=LocalServerResponse)
+def get_server(server_id: int, db: Session = Depends(get_db)):
+    server = db.query(LocalServer).filter(LocalServer.id == server_id).first()
+    if not server:
+        raise HTTPException(404, "Server not found")
+    return server
+
+
+@app.delete("/servers/{server_id}")
+def delete_server(server_id: int, db: Session = Depends(get_db)):
+    server = db.query(LocalServer).filter(LocalServer.id == server_id).first()
+    if not server:
+        raise HTTPException(404, "Server not found")
+
+    db.delete(server)
+    db.commit()
+    return {"success": True}
