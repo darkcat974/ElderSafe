@@ -1,17 +1,18 @@
-FROM node:20-alpine
-
+# ---- Étape 1 : build ----
+FROM node:20-alpine AS build
 WORKDIR /app
-
-# Copier uniquement les fichiers de dépendances en premier pour optimiser le cache Docker
 COPY package.json package-lock.json ./
-
 RUN npm install
-
-# Copier le reste du code source
 COPY . .
+ARG VITE_API_URL=/api
+ARG VITE_SECRETBOX_KEY_B64        # ← ajoute ça
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_SECRETBOX_KEY_B64=$VITE_SECRETBOX_KEY_B64
+RUN npm run build
+# Génère le dossier /app/dist avec les fichiers statiques optimisés
 
-# Exposer le port de Vite
-EXPOSE 5173
-
-# Démarrer le serveur de développement
-CMD ["npm", "run", "dev"]
+# ---- Étape 2 : servir avec Nginx ----
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+# nginx démarre automatiquement

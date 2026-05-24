@@ -3,7 +3,7 @@ import { User, Local_servers, Alerte } from './types';
 import { encryptJson, decryptJson } from './crypto';
 import './Dashboard.css';
 
-const API_BASE = 'http://127.0.0.1:8000/';
+const API_BASE = 'https://eldersafe.re/api/';
 
 const Dashboard: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);

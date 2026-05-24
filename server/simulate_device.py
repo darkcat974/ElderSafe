@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from crypto import encrypt_json, decrypt_json
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "https://eldersafe.re/api/"
 
 def req_enc(method, url, payload=None):
     headers = {"x-encrypted": "true"}
