@@ -35,7 +35,9 @@ function useFetch<T>(path: string, refreshKey = 0) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setLoading(true)
+    if (data === null) {
+      setLoading(true)
+    }
     fetch(`${BASE}${path}`)
       .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() })
       .then(d => { setData(d); setError(null) })

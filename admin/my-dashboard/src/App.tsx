@@ -6,17 +6,25 @@ import Login from './pages/Login'
 import { UserProvider } from './context/UserContext'
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [userRole, setUserRole] = useState<'admin' | 'caregiver' | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('isAuthenticated') === 'true'
+  })
+  const [userRole, setUserRole] = useState<'admin' | 'caregiver' | null>(() => {
+    return localStorage.getItem('userRole') as 'admin' | 'caregiver' | null
+  })
 
   const handleLogin = (role: 'admin' | 'caregiver') => {
     setIsAuthenticated(true)
     setUserRole(role)
+    localStorage.setItem('isAuthenticated', 'true')
+    localStorage.setItem('userRole', role)
   }
 
   const handleLogout = () => {
     setIsAuthenticated(false)
     setUserRole(null)
+    localStorage.removeItem('isAuthenticated')
+    localStorage.removeItem('userRole')
   }
 
   return (

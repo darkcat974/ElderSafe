@@ -1,9 +1,10 @@
 import React from 'react'
 import { useServers, useUsers, useAlertes } from '../../hooks/useApi'
-import { Loader2, Wifi, WifiOff, AlertTriangle, Wrench, Server, Clock } from 'lucide-react'
+import { Loader2, Wifi, WifiOff, AlertTriangle, Wrench, Server, Clock, CheckCircle } from 'lucide-react'
 
 interface RoomGridProps {
   refreshKey?: number
+  onResolve?: (id: number) => void
 }
 
 const STATUS_CONFIG: Record<string, { icon: React.ReactNode; border: string; bg: string; label: string }> = {
@@ -19,7 +20,7 @@ const URGENCE_COLOR: Record<string, string> = {
   LOW:    'text-blue-500',
 }
 
-const RoomGrid: React.FC<RoomGridProps> = ({ refreshKey = 0 }) => {
+const RoomGrid: React.FC<RoomGridProps> = ({ refreshKey = 0, onResolve }) => {
   const { data: servers, loading: loadS } = useServers(refreshKey)
   const { data: users,   loading: loadU } = useUsers(refreshKey)
   const { data: alertes, loading: loadA } = useAlertes(refreshKey)
@@ -85,7 +86,7 @@ const RoomGrid: React.FC<RoomGridProps> = ({ refreshKey = 0 }) => {
 
               {/* Active alert */}
               {lastAlert ? (
-                <div className="mt-3 border-t pt-3 border-gray-200 space-y-1">
+                <div className="mt-3 border-t pt-3 border-gray-200 space-y-2">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dernière alerte active</p>
                   <p className={`text-sm font-semibold ${URGENCE_COLOR[lastAlert.niveau_urgence] ?? 'text-gray-700'}`}>
                     {lastAlert.etat_de_la_chute}
@@ -96,6 +97,17 @@ const RoomGrid: React.FC<RoomGridProps> = ({ refreshKey = 0 }) => {
                   </div>
                   <div className="flex items-center gap-1 text-xs text-gray-400">
                     {lastAlert.timestamp}
+                  </div>
+                  <div className="pt-1 flex justify-end">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onResolve) onResolve(lastAlert.id);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-green-50 text-green-700 border border-green-300 hover:bg-green-100 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      <CheckCircle className="h-3 w-3" /> Résoudre
+                    </button>
                   </div>
                 </div>
               ) : (

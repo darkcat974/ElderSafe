@@ -26,7 +26,7 @@ const CaregiverDashboard: React.FC = () => {
   const navigate   = useNavigate()
 
   const { data: alertes, loading: loadA } = useAlertes(refreshKey)
-  const { data: servers }                 = useServers()
+  const { data: servers }                 = useServers(refreshKey)
 
   const activeAlertes = (alertes ?? []).filter(a => !a.is_resolved)
   const activeCount   = activeAlertes.length
@@ -57,6 +57,25 @@ const CaregiverDashboard: React.FC = () => {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  // Automatically poll the API every 3 seconds to keep alerts and servers updated
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshKey(k => k + 1)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Automatically open the resolution panel if a new active alert arrives
+  const maxActiveId = activeAlertes.length > 0 ? Math.max(...activeAlertes.map(a => a.id)) : 0
+  const prevMaxActiveId = useRef(maxActiveId)
+
+  useEffect(() => {
+    if (maxActiveId > prevMaxActiveId.current) {
+      setResolveOpen(true)
+    }
+    prevMaxActiveId.current = maxActiveId
+  }, [maxActiveId])
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -232,7 +251,7 @@ const CaregiverDashboard: React.FC = () => {
       <main className="flex-1 overflow-auto p-4">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Surveillance des serveurs</h2>
-          <RoomGrid refreshKey={refreshKey} />
+          <RoomGrid refreshKey={refreshKey} onResolve={handleResolve} />
         </div>
       </main>
     </div>
