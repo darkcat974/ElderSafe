@@ -250,7 +250,7 @@ const CaregiverDashboard: React.FC = () => {
       {/* ── Main content ── */}
       <main className="flex-1 overflow-auto p-4">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Surveillance des serveurs</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Surveillance des clients</h2>
           <RoomGrid refreshKey={refreshKey} onResolve={handleResolve} />
         </div>
       </main>

@@ -95,6 +95,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     name = Column(String)
+    is_active = Column(Boolean, default=True)
 
 
 class LocalServer(Base):
@@ -119,17 +120,32 @@ class Alerte(Base):
     timestamp = Column(String)
     is_resolved = Column(Boolean, default=False)
 
+
+class Contact(Base):
+    __tablename__ = "contacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    contact_name = Column(String)
+    user_name = Column(String)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    num_tel = Column(String)
+    mail = Column(String)
+    pris_en_charge = Column(Boolean, default=False)
+
+
 Base.metadata.create_all(bind=engine)
 
 class UserCreate(BaseModel):
     email: str
     name: str
+    is_active: bool = True
 
 
 class UserResponse(BaseModel):
     id: int
     email: str
     name: str
+    is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -185,6 +201,27 @@ class AlerteResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ContactCreate(BaseModel):
+    contact_name: str
+    user_name: str
+    user_id: int
+    num_tel: str
+    mail: str
+    pris_en_charge: bool = False
+
+
+class ContactResponse(BaseModel):
+    id: int
+    contact_name: str
+    user_name: str
+    user_id: int
+    num_tel: str
+    mail: str
+    pris_en_charge: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 import random
 
 def seed_data():
@@ -227,6 +264,63 @@ def seed_data():
             )
             db.add(server)
 
+        # ---- CONTACTS ----
+        contacts_data = [
+            ("Jean", "Alice", "0612345678", "jean@mail.com"),
+            ("Marie", "Alice", "0623456789", "marie@mail.com"),
+            ("Pierre", "Bob", "0634567890", "pierre@mail.com"),
+            ("Sophie", "Charlie", "0645678901", "sophie@mail.com"),
+        ]
+
+        for contact_name, u_name, num_tel, mail in contacts_data:
+            usr = next((u for u in users if u.name == u_name), None)
+            if usr:
+                existing = db.query(Contact).filter_by(contact_name=contact_name, user_id=usr.id).first()
+                if not existing:
+                    contact = Contact(
+                        contact_name=contact_name,
+                        user_name=usr.name,
+                        user_id=usr.id,
+                        num_tel=num_tel,
+                        mail=mail,
+                        pris_en_charge=random.choice([True, False])
+                    )
+                    db.add(contact)
+
+        # ---- ALERTES ----
+        if db.query(Alerte).count() == 0:
+            all_servers = db.query(LocalServer).all()
+            for srv in all_servers:
+                # Ajouter 1 à 2 alertes résolues pour l'historique
+                for k in range(random.randint(1, 2)):
+                    alert = Alerte(
+                        local_server_id=srv.id,
+                        client_id=srv.client_id,
+                        etat_de_la_chute=random.choice([
+                            "Lourde chute détectée",
+                            "Chute lente amortie",
+                            "Mouvement inhabituel prolongé"
+                        ]),
+                        temps_au_sol=f"{random.randint(1, 10)} min",
+                        niveau_urgence=random.choice(["HIGH", "MEDIUM"]),
+                        timestamp=f"2026-05-26 14:0{k}:00",
+                        is_resolved=True
+                    )
+                    db.add(alert)
+                
+                # Ajouter parfois une alerte non résolue
+                if srv.status == StatusEnum.ERROR or random.choice([True, False]):
+                    alert = Alerte(
+                        local_server_id=srv.id,
+                        client_id=srv.client_id,
+                        etat_de_la_chute="Alerte manuelle SOS initiée",
+                        temps_au_sol="3 min",
+                        niveau_urgence="HIGH",
+                        timestamp="2026-05-26 21:55:00",
+                        is_resolved=False
+                    )
+                    db.add(alert)
+
         db.commit()
         print("✅ Seed done")
     finally:
@@ -244,7 +338,7 @@ async def startup():
 
 @app.post("/users", response_model=UserResponse)
 def create_user(data: UserCreate, db: Session = Depends(get_db)):
-    user = User(email=data.email, name=data.name)
+    user = User(email=data.email, name=data.name, is_active=data.is_active)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -254,6 +348,30 @@ def create_user(data: UserCreate, db: Session = Depends(get_db)):
 @app.get("/users", response_model=list[UserResponse])
 def get_users(db: Session = Depends(get_db)):
     return db.query(User).all()
+
+
+@app.put("/users/{user_id}", response_model=UserResponse)
+def update_user(user_id: int, data: UserCreate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.email = data.email
+    user.name = data.name
+    user.is_active = data.is_active
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@app.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_active = False
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 # -------- LOCAL SERVERS --------
@@ -346,3 +464,45 @@ def resolve_alerte(alerte_id: int, db: Session = Depends(get_db)):
 @app.get("/alertes", response_model=list[AlerteResponse])
 def get_alertes(db: Session = Depends(get_db)):
     return db.query(Alerte).all()
+
+
+# -------- CONTACTS --------
+
+@app.post("/contacts", response_model=ContactResponse)
+def create_contact(data: ContactCreate, db: Session = Depends(get_db)):
+    contact = Contact(**data.model_dump())
+    db.add(contact)
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+@app.get("/contacts", response_model=list[ContactResponse])
+def get_contacts(db: Session = Depends(get_db)):
+    return db.query(Contact).all()
+
+
+@app.put("/contacts/{contact_id}", response_model=ContactResponse)
+def update_contact(contact_id: int, data: ContactCreate, db: Session = Depends(get_db)):
+    contact = db.query(Contact).filter(Contact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    contact.contact_name = data.contact_name
+    contact.user_name = data.user_name
+    contact.user_id = data.user_id
+    contact.num_tel = data.num_tel
+    contact.mail = data.mail
+    contact.pris_en_charge = data.pris_en_charge
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+@app.delete("/contacts/{contact_id}")
+def delete_contact(contact_id: int, db: Session = Depends(get_db)):
+    contact = db.query(Contact).filter(Contact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    db.delete(contact)
+    db.commit()
+    return {"success": True}
