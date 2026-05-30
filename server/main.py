@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException, Depends, Request, Response
 from fastapi.routing import APIRoute
 from typing import Callable
 import json
+import hashlib
+import secrets
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine, Column, Integer, String, Boolean
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
@@ -133,6 +135,31 @@ class Contact(Base):
     pris_en_charge = Column(Boolean, default=False)
 
 
+def hash_password(password: str, salt: str = None) -> str:
+    if not salt:
+        salt = secrets.token_hex(16)
+    hashed = hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
+    return f"{salt}:{hashed}"
+
+
+def verify_password(password: str, stored_password: str) -> bool:
+    try:
+        salt, hashed = stored_password.split(":")
+        return hash_password(password, salt) == stored_password
+    except Exception:
+        return False
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    password = Column(String)
+    role = Column(String)
+
+
 Base.metadata.create_all(bind=engine)
 
 class UserCreate(BaseModel):
@@ -220,6 +247,11 @@ class ContactResponse(BaseModel):
     pris_en_charge: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 import random
@@ -321,6 +353,21 @@ def seed_data():
                     )
                     db.add(alert)
 
+        # ---- ACCOUNTS ----
+        if db.query(Account).count() == 0:
+            accounts_data = [
+                ("admin", "admin@eldersafe.com", "password", "admin"),
+                ("caregiver", "caregiver@eldersafe.com", "password", "caregiver"),
+                ("edlersafe", "contact@eldersafe.com", "eldersafe974", "admin"),
+            ]
+            for username, email, pwd, role in accounts_data:
+                db.add(Account(
+                    username=username,
+                    email=email,
+                    password=hash_password(pwd),
+                    role=role
+                ))
+
         db.commit()
         print("✅ Seed done")
     finally:
@@ -334,6 +381,26 @@ async def startup():
 
 
 # ------------------ ROOT ------------------
+# -------- AUTH --------
+
+@app.post("/api/v1/login")
+def login_endpoint(payload: LoginRequest, db: Session = Depends(get_db)):
+    # Chercher le compte par nom d'utilisateur ou adresse email
+    account = db.query(Account).filter(
+        (Account.username == payload.username) | (Account.email == payload.username)
+    ).first()
+
+    if not account or not verify_password(payload.password, account.password):
+        raise HTTPException(status_code=401, detail="Identifiants incorrects")
+
+    return {
+        "success": True,
+        "username": account.username,
+        "email": account.email,
+        "role": account.role
+    }
+
+
 # -------- USERS --------
 
 @app.post("/users", response_model=UserResponse)
