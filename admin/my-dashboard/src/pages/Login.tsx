@@ -19,7 +19,7 @@ const Login: React.FC = () => {
 
     const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
     try {
-      const response = await fetch(`${BASE}/api/v1/login`, {
+      const response = await fetch(`${BASE}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -36,7 +36,7 @@ const Login: React.FC = () => {
 
       const data = await response.json()
       login(data.role)
-      
+
       // Redirect based on role returned by backend
       if (data.role === 'admin') {
         navigate('/admin')
@@ -99,11 +99,10 @@ const Login: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setRole('caregiver')}
-                className={`flex items-center px-4 py-2 rounded-md ${
-                  role === 'caregiver' 
-                    ? 'bg-[#23a5e3] text-white' 
+                className={`flex items-center px-4 py-2 rounded-md ${role === 'caregiver'
+                    ? 'bg-[#23a5e3] text-white'
                     : 'bg-white text-gray-700 border border-gray-300'
-                }`}
+                  }`}
               >
                 <Users className="h-5 w-5 mr-2" />
                 Aide-soignant
@@ -111,11 +110,10 @@ const Login: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setRole('admin')}
-                className={`flex items-center px-4 py-2 rounded-md ${
-                  role === 'admin' 
-                    ? 'bg-[#23a5e3] text-white' 
+                className={`flex items-center px-4 py-2 rounded-md ${role === 'admin'
+                    ? 'bg-[#23a5e3] text-white'
                     : 'bg-white text-gray-700 border border-gray-300'
-                }`}
+                  }`}
               >
                 <Shield className="h-5 w-5 mr-2" />
                 Administrateur

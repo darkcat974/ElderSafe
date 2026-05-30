@@ -46,11 +46,11 @@ FastAPI génère automatiquement un Swagger interactif. Vous pouvez le consulter
 - `POST /servers` : Enregistre un nouveau serveur local.
 - `DELETE /servers/{server_id}` : Supprime un serveur local.
 - `GET /alertes` : Récupère l'historique complet des alertes.
-- `PUT /api/v1/alertes/{alerte_id}/resolve` : Marque une alerte comme "traitée/acquittée".
+- `PUT /alertes/{alerte_id}/resolve` : Marque une alerte comme "traitée/acquittée".
 
 ### API Capteurs IoT (Serveurs Locaux)
-- `POST /api/v1/serveur-local/statut` : Permet au capteur d'indiquer qu'il est en ligne (`etat_connexion: "connecte"`).
-- `POST /api/v1/serveur-local/alertes` : Permet au capteur de transmettre une urgence (chute).
+- `POST /serveur-local/statut` : Permet au capteur d'indiquer qu'il est en ligne (`etat_connexion: "connecte"`).
+- `POST /serveur-local/alertes` : Permet au capteur de transmettre une urgence (chute).
 
 ## 🚀 Démarrage et Tests
 

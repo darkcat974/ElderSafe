@@ -59,7 +59,7 @@ def run_simulation():
         "id_local": "SIMULATEUR_101",
         "etat_connexion": "connecte"
     }
-    res = req_enc("POST", f"{BASE_URL}/api/v1/serveur-local/statut", payload=statut_payload)
+    res = req_enc("POST", f"{BASE_URL}/serveur-local/statut", payload=statut_payload)
     print(f"   -> Réponse: {res}")
 
     print("⏳ Attente de 3 secondes (Regardez votre Dashboard !)...")
@@ -78,7 +78,7 @@ def run_simulation():
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     }
-    res = req_enc("POST", f"{BASE_URL}/api/v1/serveur-local/alertes", payload=alerte_payload)
+    res = req_enc("POST", f"{BASE_URL}/serveur-local/alertes", payload=alerte_payload)
     print(f"   -> Réponse: {res}")
 
     print("\n🎉 Simulation terminée. Allez vérifier l'historique sur votre Dashboard React !")

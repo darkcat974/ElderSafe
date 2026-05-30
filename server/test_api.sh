@@ -70,7 +70,7 @@ echo -e "${BLUE}... (tronqué)${NC}"
 if [[ "$SERVERS_GET_RES" == *"$LOCAL_SERVER_STR"* ]]; then check_success "true"; else check_success "false"; fi
 
 echo -e "${BLUE}5️⃣ Mise à jour du statut du serveur local (Simule une connexion IoT)...${NC}"
-STATUT_RES=$(curl -s -X POST "$BASE_URL/api/v1/serveur-local/statut" -H "Content-Type: application/json" -d '{
+STATUT_RES=$(curl -s -X POST "$BASE_URL/serveur-local/statut" -H "Content-Type: application/json" -d '{
   "id_local": "'$LOCAL_SERVER_ID'",
   "etat_connexion": "connecte"
 }' 2>/dev/null)
@@ -78,7 +78,7 @@ echo "$STATUT_RES" | format_json
 if [[ "$STATUT_RES" == *"Statut mis"* ]]; then check_success "true"; else check_success "false"; fi
 
 echo -e "${BLUE}6️⃣ Envoi d'une alerte (Simule une chute détectée)...${NC}"
-ALERTE_RES=$(curl -s -X POST "$BASE_URL/api/v1/serveur-local/alertes" -H "Content-Type: application/json" -d '{
+ALERTE_RES=$(curl -s -X POST "$BASE_URL/serveur-local/alertes" -H "Content-Type: application/json" -d '{
   "id_local": "'$LOCAL_SERVER_ID'",
   "id_client": "'$USER_ID'",
   "etat_connexion": "connecte",
@@ -101,7 +101,7 @@ if [[ "$ALERTES_GET_RES" == *"chute detectee"* ]]; then check_success "true"; el
 
 echo -e "${BLUE}8️⃣ Résolution de l'alerte (Via le dashboard de l'admin)...${NC}"
 if [ -n "$ALERTE_ID" ]; then
-    RESOLVE_RES=$(curl -s -X PUT "$BASE_URL/api/v1/alertes/$ALERTE_ID/resolve" 2>/dev/null)
+    RESOLVE_RES=$(curl -s -X PUT "$BASE_URL/alertes/$ALERTE_ID/resolve" 2>/dev/null)
     echo "$RESOLVE_RES" | format_json
     if [[ "$RESOLVE_RES" == *"traitée"* || "$RESOLVE_RES" == *"traitee"* || "$RESOLVE_RES" == *"trait\u00e9e"* ]]; then check_success "true"; else check_success "false"; fi
 else

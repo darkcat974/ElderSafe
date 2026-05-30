@@ -383,7 +383,7 @@ async def startup():
 # ------------------ ROOT ------------------
 # -------- AUTH --------
 
-@app.post("/api/v1/login")
+@app.post("/login")
 def login_endpoint(payload: LoginRequest, db: Session = Depends(get_db)):
     # Chercher le compte par nom d'utilisateur ou adresse email
     account = db.query(Account).filter(
@@ -478,7 +478,7 @@ def delete_server(server_id: int, db: Session = Depends(get_db)):
 
 # -------- API SERVEUR LOCAL --------
 
-@app.post("/api/v1/serveur-local/statut")
+@app.post("/serveur-local/statut")
 def update_statut(payload: StatutPayload, db: Session = Depends(get_db)):
     server = db.query(LocalServer).filter(LocalServer.local_server_id == payload.id_local).first()
     if not server:
@@ -494,7 +494,7 @@ def update_statut(payload: StatutPayload, db: Session = Depends(get_db)):
     return {"message": "Statut mis à jour avec succès", "status": server.status}
 
 
-@app.post("/api/v1/serveur-local/alertes")
+@app.post("/serveur-local/alertes")
 def recevoir_alerte(payload: AlertePayload, db: Session = Depends(get_db)):
     server = db.query(LocalServer).filter(LocalServer.local_server_id == payload.id_local).first()
     if not server:
@@ -518,7 +518,7 @@ def recevoir_alerte(payload: AlertePayload, db: Session = Depends(get_db)):
     return {"message": "Alerte reçue et enregistrée", "alerte_id": nouvelle_alerte.id}
 
 
-@app.put("/api/v1/alertes/{alerte_id}/resolve")
+@app.put("/alertes/{alerte_id}/resolve")
 def resolve_alerte(alerte_id: int, db: Session = Depends(get_db)):
     alerte = db.query(Alerte).filter(Alerte.id == alerte_id).first()
     if not alerte:

@@ -63,7 +63,7 @@ export function useAlertes(refreshKey = 0) {
 }
 
 export async function resolveAlerte(id: number): Promise<void> {
-  const r = await fetch(`${BASE}/api/v1/alertes/${id}/resolve`, { method: 'PUT' })
+  const r = await fetch(`${BASE}/alertes/${id}/resolve`, { method: 'PUT' })
   if (!r.ok) throw new Error(r.statusText)
 }
 
